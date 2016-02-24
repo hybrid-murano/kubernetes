@@ -178,7 +178,12 @@ func (client *ProviderClient) Request(method, url string, options RequestOpts) (
 	}
 
 	// Issue the request.
-	resp, err := client.HTTPClient.Do(req)
+	tr := &http.Transport{
+		TLSClientConfig:    &tls.Config{InsecureSkipVerify: true},
+    }
+    httpclient := &http.Client{Transport: tr}
+    resp, err := httpclient.Do(req)
+	//resp, err := client.HTTPClient.Do(req)
 	if err != nil {
 		return nil, err
 	}

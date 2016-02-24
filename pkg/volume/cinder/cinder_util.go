@@ -21,8 +21,8 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"path"
-	"strings"
+	//"path"
+	//"strings"
 	"time"
 
 	"github.com/golang/glog"
@@ -94,18 +94,26 @@ func (util *CinderDiskUtil) AttachDisk(b *cinderVolumeBuilder, globalPDPath stri
 }
 
 func makeDevicePath(diskid string) string {
-	files, _ := ioutil.ReadDir("/dev/disk/by-id/")
-	for _, f := range files {
-		if strings.Contains(f.Name(), "virtio-") {
-			devid_prefix := f.Name()[len("virtio-"):len(f.Name())]
-			if strings.Contains(diskid, devid_prefix) {
-				glog.V(4).Infof("Found disk attached as %q; full devicepath: %s\n", f.Name(), path.Join("/dev/disk/by-id/", f.Name()))
-				return path.Join("/dev/disk/by-id/", f.Name())
-			}
-		}
-	}
-	glog.Warningf("Failed to find device for the diskid: %q\n", diskid)
-	return ""
+	//extra code
+    _, err := os.Stat(diskid)
+    if err != nil {
+    	glog.Warningf("Failed to find device for the diskid: %q\n", diskid)
+        return ""
+    }
+    return diskid
+    //extra code
+	//files, _ := ioutil.ReadDir("/dev/disk/by-id/")
+	//for _, f := range files {
+	//	if strings.Contains(f.Name(), "virtio-") {
+	//		devid_prefix := f.Name()[len("virtio-"):len(f.Name())]
+	//		if strings.Contains(diskid, devid_prefix) {
+	//			glog.V(4).Infof("Found disk attached as %q; full devicepath: %s\n", f.Name(), path.Join("/dev/disk/by-id/", f.Name()))
+	//			return path.Join("/dev/disk/by-id/", f.Name())
+	//		}
+	//	}
+	//}
+	//glog.Warningf("Failed to find device for the diskid: %q\n", diskid)
+	//return ""
 }
 
 // Unmounts the device and detaches the disk from the kubelet's host machine.

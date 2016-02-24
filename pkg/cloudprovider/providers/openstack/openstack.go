@@ -235,36 +235,54 @@ func (i *Instances) List(name_filter string) ([]string, error) {
 }
 
 func getServerByName(client *gophercloud.ServiceClient, name string) (*servers.Server, error) {
-	opts := servers.ListOpts{
-		Name:   fmt.Sprintf("^%s$", regexp.QuoteMeta(name)),
-		Status: "ACTIVE",
+	//extra code
+	hostname, oserr := ossys.Hostname()
+	
+	if oserr != nil {
+		glog.Errorf("Failed to get Minion's hostname: %v", oserr)
+		return nil, oserr
 	}
-	pager := servers.List(client, opts)
-
-	serverList := make([]servers.Server, 0, 1)
-
-	err := pager.EachPage(func(page pagination.Page) (bool, error) {
-		s, err := servers.ExtractServers(page)
-		if err != nil {
-			return false, err
-		}
-		serverList = append(serverList, s...)
-		if len(serverList) > 1 {
-			return false, ErrMultipleResults
-		}
-		return true, nil
-	})
-	if err != nil {
-		return nil, err
+	
+	nova_instance, e:= servers.Get(client, hostname).Extract()
+	if e != nil {
+		glog.Errorf("Error occured getting server: %s", hostname)
+		return nil, e
 	}
+	
+	instances_json, _ := json.Marshal(nova_instance)
+    glog.V(4).Infof("Nova instance %s", string(instances_json))
+    return nova_instance, nil
+    //extra code
+	//opts := servers.ListOpts{
+	//	Name:   fmt.Sprintf("^%s$", regexp.QuoteMeta(name)),
+	//	Status: "ACTIVE",
+	//}
+	//pager := servers.List(client, opts)
 
-	if len(serverList) == 0 {
-		return nil, ErrNotFound
-	} else if len(serverList) > 1 {
-		return nil, ErrMultipleResults
-	}
+	//serverList := make([]servers.Server, 0, 1)
 
-	return &serverList[0], nil
+	//err := pager.EachPage(func(page pagination.Page) (bool, error) {
+	//	s, err := servers.ExtractServers(page)
+	//	if err != nil {
+	//		return false, err
+	//	}
+	//	serverList = append(serverList, s...)
+	//	if len(serverList) > 1 {
+	//		return false, ErrMultipleResults
+	//	}
+	//	return true, nil
+	//})
+	//if err != nil {
+	//	return nil, err
+	//}
+
+	//if len(serverList) == 0 {
+	//	return nil, ErrNotFound
+	//} else if len(serverList) > 1 {
+	//	return nil, ErrMultipleResults
+	//}
+
+	//return &serverList[0], nil
 }
 
 func findAddrs(netblob interface{}) []string {
@@ -795,7 +813,11 @@ func (os *OpenStack) AttachDisk(diskName string) (string, error) {
 	if len(disk.Attachments) > 0 && disk.Attachments[0]["server_id"] != nil {
 		if compute_id == disk.Attachments[0]["server_id"] {
 			glog.V(4).Infof("Disk: %q is already attached to compute: %q", diskName, compute_id)
-			return disk.ID, nil
+			//extra code
+			devPath := disk.Attachments[0]["device"]
+            return devPath.(string), nil
+            //extra code
+			//return disk.ID, nil
 		} else {
 			errMsg := fmt.Sprintf("Disk %q is attached to a different compute: %q, should be detached before proceeding", diskName, disk.Attachments[0]["server_id"])
 			glog.Errorf(errMsg)
@@ -811,7 +833,23 @@ func (os *OpenStack) AttachDisk(diskName string) (string, error) {
 		return "", err
 	}
 	glog.V(2).Infof("Successfully attached %s volume to %s compute", diskName, compute_id)
-	return disk.ID, nil
+	//extra code
+	for i := 0; i < 30; i++ {
+		disk2, err := os.getVolume(diskName)
+        if err != nil {
+        	return "", nil
+        }
+        if len(disk2.Attachments) > 0 && disk2.Attachments[0]["server_id"] != nil {
+	        if compute_id == disk2.Attachments[0]["server_id"] && disk2.Attachments[0]["device"] != nil {
+	        	devPath := disk2.Attachments[0]["device"]
+	            return devPath.(string), nil
+	        }
+        }
+        time.Sleep(2 * time.Second)
+    }
+    return "", errors.New("Volume is not attached to Compute")
+    //extra code
+	//return disk.ID, nil
 }
 
 // Detaches given cinder volume from the compute running kubelet
@@ -860,30 +898,41 @@ func (os *OpenStack) getVolume(diskName string) (volumes.Volume, error) {
 		glog.Errorf("Unable to initialize cinder client for region: %s", os.region)
 		return volume, err
 	}
+	
+	//extra code
+    singleVolume, e := volumes.Get(sClient, diskName).Extract()
+    if e != nil {
+    	glog.Errorf("Error occured getting volume: %s", diskName)
+        return volume, e
+    }
+    svJson, _ := json.Marshal(singleVolume)
+    glog.V(4).Infof("Single volume %s", string(svJson))
+    return *singleVolume, e
+    //extra code
 
-	err = volumes.List(sClient, nil).EachPage(func(page pagination.Page) (bool, error) {
-		vols, err := volumes.ExtractVolumes(page)
-		if err != nil {
-			glog.Errorf("Failed to extract volumes: %v", err)
-			return false, err
-		} else {
-			for _, v := range vols {
-				glog.V(4).Infof("%s %s %v", v.ID, v.Name, v.Attachments)
-				if v.Name == diskName || strings.Contains(v.ID, diskName) {
-					volume = v
-					return true, nil
-				}
-			}
-		}
+	//err = volumes.List(sClient, nil).EachPage(func(page pagination.Page) (bool, error) {
+	//	vols, err := volumes.ExtractVolumes(page)
+	//	if err != nil {
+	//		glog.Errorf("Failed to extract volumes: %v", err)
+	//		return false, err
+	//	} else {
+	//		for _, v := range vols {
+	//			glog.V(4).Infof("%s %s %v", v.ID, v.Name, v.Attachments)
+	//			if v.Name == diskName || strings.Contains(v.ID, diskName) {
+	//				volume = v
+	//				return true, nil
+	//			}
+	//		}
+	//	}
 		// if it reached here then no disk with the given name was found.
-		errmsg := fmt.Sprintf("Unable to find disk: %s in region %s", diskName, os.region)
-		return false, errors.New(errmsg)
-	})
-	if err != nil {
-		glog.Errorf("Error occured getting volume: %s", diskName)
-		return volume, err
-	}
-	return volume, err
+	//	errmsg := fmt.Sprintf("Unable to find disk: %s in region %s", diskName, os.region)
+	//	return false, errors.New(errmsg)
+	//})
+	//if err != nil {
+	//	glog.Errorf("Error occured getting volume: %s", diskName)
+	//	return volume, err
+	///}
+	//return volume, err
 }
 
 func (os *OpenStack) getComputeIDbyHostname(cClient *gophercloud.ServiceClient) (string, error) {
@@ -894,35 +943,45 @@ func (os *OpenStack) getComputeIDbyHostname(cClient *gophercloud.ServiceClient) 
 		glog.Errorf("Failed to get Minion's hostname: %v", err)
 		return "", err
 	}
+	
+	//extra code
+	server, err := getServerByName(cClient, hostname)
+    if err != nil {
+    	return "", err
+    } else {
+    	glog.V(4).Infof("found server: %s with host :%s", server.ID, hostname)
+    	return server.ID, nil
+    }
+    //extra code
 
-	i, ok := os.Instances()
-	if !ok {
-		glog.Errorf("Unable to get instances")
-		return "", errors.New("Unable to get instances")
-	}
+	//i, ok := os.Instances()
+	//if !ok {
+	//	glog.Errorf("Unable to get instances")
+	//	return "", errors.New("Unable to get instances")
+	//}
 
-	srvs, err := i.List(".")
-	if err != nil {
-		glog.Errorf("Failed to list servers: %v", err)
-		return "", err
-	}
+	//srvs, err := i.List(".")
+	//if err != nil {
+	//	glog.Errorf("Failed to list servers: %v", err)
+	//	return "", err
+	//}
 
-	if len(srvs) == 0 {
-		glog.Errorf("Found no servers in the region")
-		return "", errors.New("Found no servers in the region")
-	}
-	glog.V(4).Infof("found servers: %v", srvs)
+	//if len(srvs) == 0 {
+	//	glog.Errorf("Found no servers in the region")
+	//	return "", errors.New("Found no servers in the region")
+	//}
+	//glog.V(4).Infof("found servers: %v", srvs)
 
-	for _, srvname := range srvs {
-		server, err := getServerByName(cClient, srvname)
-		if err != nil {
-			return "", err
-		} else {
-			if (server.Metadata["hostname"] != nil && server.Metadata["hostname"] == hostname) || (len(server.Name) > 0 && server.Name == hostname) {
-				glog.V(4).Infof("found server: %s with host :%s", server.Name, hostname)
-				return server.ID, nil
-			}
-		}
-	}
-	return "", fmt.Errorf("No server found matching hostname: %s", hostname)
+	//for _, srvname := range srvs {
+	//	server, err := getServerByName(cClient, srvname)
+	//	if err != nil {
+	//		return "", err
+	//	} else {
+	//		if (server.Metadata["hostname"] != nil && server.Metadata["hostname"] == hostname) || (len(server.Name) > 0 && server.Name == hostname) {
+	//			glog.V(4).Infof("found server: %s with host :%s", server.Name, hostname)
+	//			return server.ID, nil
+	//		}
+	//	}
+	//}
+	//return "", fmt.Errorf("No server found matching hostname: %s", hostname)
 }
