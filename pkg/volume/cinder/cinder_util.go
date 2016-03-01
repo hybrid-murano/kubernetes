@@ -19,10 +19,10 @@ package cinder
 import (
 	"errors"
 	"fmt"
-	"io/ioutil"
+	//"io/ioutil"
 	"os"
 	//"path"
-	//"strings"
+	"strings"
 	"time"
 
 	"github.com/golang/glog"

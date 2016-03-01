@@ -17,14 +17,15 @@ limitations under the License.
 package openstack
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	ossys "os"
-	"regexp"
-	"strings"
+	//"regexp"
+	//"strings"
 	"time"
 
 	"github.com/rackspace/gophercloud"
